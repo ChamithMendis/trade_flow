@@ -1,0 +1,31 @@
+{
+  "name": "tradeflow",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TradeFlow MVP - a real-time trading simulator (modular monolith).",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n types,api,web -c blue,green,magenta \"npm:dev:types\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:types": "npm run dev -w @tradeflow/shared-types",
+    "dev:api": "npm run start:dev -w @tradeflow/api",
+    "dev:web": "npm run dev -w @tradeflow/web",
+    "build": "npm run build -w @tradeflow/shared-types && npm run build -w @tradeflow/api && npm run build -w @tradeflow/web",
+    "lint": "npm run lint -w @tradeflow/api && npm run lint -w @tradeflow/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck -w @tradeflow/shared-types && npm run typecheck -w @tradeflow/api && npm run typecheck -w @tradeflow/web",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.4.2"
+  }
+}
