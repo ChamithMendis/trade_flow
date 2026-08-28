@@ -22,7 +22,10 @@
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck -w @tradeflow/shared-types && npm run typecheck -w @tradeflow/api && npm run typecheck -w @tradeflow/web",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "db:migrate": "npm run prisma:migrate -w @tradeflow/api",
+    "db:seed": "npm run prisma:seed -w @tradeflow/api",
+    "db:studio": "npm run db:studio -w @tradeflow/api"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

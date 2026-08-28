@@ -27,6 +27,12 @@ npm-debug.log*
 
 # prisma
 prisma/*.db
+apps/api/src/generated/
+# prisma 7 drops AI-assistant skill files on CLI runs
+apps/api/.claude/
+apps/api/.windsurf/
+apps/api/.agents/
+apps/api/skills-lock.json
 
 # misc
 .cache/

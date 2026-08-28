@@ -1,0 +1,161 @@
+// TradeFlow database schema.
+// Docs: https://pris.ly/d/prisma-schema
+// The datasource URL lives in prisma7.config.ts (loaded from the repo-root .env).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  TRADER
+  ADMIN
+}
+
+enum InstrumentStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+}
+
+enum OrderStatus {
+  NEW
+  PROCESSING
+  PARTIALLY_FILLED
+  FILLED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderEventType {
+  CREATED
+  PROCESSING
+  PARTIALLY_FILLED
+  FILLED
+  REJECTED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(TRADER)
+  createdAt    DateTime @default(now())
+
+  portfolio Portfolio?
+  orders    Order[]
+
+  @@map("users")
+}
+
+model Instrument {
+  id           String           @id @default(cuid())
+  symbol       String           @unique
+  name         String
+  currentPrice Decimal          @db.Decimal(18, 4)
+  status       InstrumentStatus @default(ACTIVE)
+  updatedAt    DateTime         @updatedAt
+
+  orders    Order[]
+  positions Position[]
+
+  @@map("instruments")
+}
+
+model Portfolio {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  availableCash Decimal @db.Decimal(18, 4)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  positions Position[]
+
+  @@map("portfolios")
+}
+
+model Position {
+  id           String   @id @default(cuid())
+  portfolioId  String
+  instrumentId String
+  quantity     Int
+  averagePrice Decimal  @db.Decimal(18, 4)
+  updatedAt    DateTime @updatedAt
+
+  portfolio  Portfolio  @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id])
+
+  @@unique([portfolioId, instrumentId])
+  @@map("positions")
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  userId         String
+  instrumentId   String
+  side           OrderSide
+  orderType      OrderType
+  quantity       Int
+  filledQuantity Int         @default(0)
+  price          Decimal?    @db.Decimal(18, 4)
+  status         OrderStatus @default(NEW)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument   @relation(fields: [instrumentId], references: [id])
+  executions Execution[]
+  events     OrderEvent[]
+
+  @@index([userId, status])
+  @@map("orders")
+}
+
+model Execution {
+  id                 String   @id @default(cuid())
+  orderId            String
+  quantity           Int
+  executionPrice     Decimal  @db.Decimal(18, 4)
+  executionReference String   @unique
+  executionTime      DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("executions")
+}
+
+model OrderEvent {
+  id        String         @id @default(cuid())
+  orderId   String
+  eventType OrderEventType
+  payload   Json
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_events")
+}

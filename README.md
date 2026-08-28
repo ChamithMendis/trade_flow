@@ -50,13 +50,20 @@ cp .env.example .env
 # 3. start Postgres + Redis
 npm run infra:up
 
-# 4. run web + api + shared-types in watch mode
+# 4. apply migrations + seed (admin user, 5 instruments)
+npm run db:migrate
+npm run db:seed
+
+# 5. run web + api + shared-types in watch mode
 npm run dev
 ```
 
 - Web: http://localhost:5173
 - API: http://localhost:3000
 - API health check: http://localhost:3000/health
+- Prisma Studio (browse the DB): `npm run db:studio`
+
+Seeded admin login (for later phases): `admin@tradeflow.local` / `admin12345`.
 
 ## Scripts (run from repo root)
 
@@ -69,8 +76,11 @@ npm run dev
 | `npm run typecheck`  | type-check all workspaces                     |
 | `npm run infra:up`   | start Postgres + Redis containers             |
 | `npm run infra:down` | stop them                                     |
+| `npm run db:migrate` | apply Prisma migrations (dev)                 |
+| `npm run db:seed`    | seed reference data                           |
+| `npm run db:studio`  | open Prisma Studio                            |
 
 ## Build status
 
-Phase 0 (foundation) complete. See `docs/decisions.md` for the running decision log and the
-project specification for the full roadmap.
+Phases 0–1 complete (foundation + database schema). See `docs/decisions.md` for the running
+decision log and the project specification for the full roadmap.
