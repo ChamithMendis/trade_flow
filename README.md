@@ -63,7 +63,8 @@ npm run dev
 - API health check: http://localhost:3000/health
 - Prisma Studio (browse the DB): `npm run db:studio`
 
-Seeded admin login (for later phases): `admin@tradeflow.local` / `admin12345`.
+Then open http://localhost:5173, register a trader (you start with $100,000 virtual cash), or
+sign in as the seeded admin: `admin@tradeflow.local` / `admin12345`.
 
 ## Scripts (run from repo root)
 
@@ -82,5 +83,5 @@ Seeded admin login (for later phases): `admin@tradeflow.local` / `admin12345`.
 
 ## Build status
 
-Phases 0–1 complete (foundation + database schema). See `docs/decisions.md` for the running
-decision log and the project specification for the full roadmap.
+Phases 0–2 complete (foundation, database schema, authentication). See `docs/decisions.md` for
+the running decision log and the project specification for the full roadmap.

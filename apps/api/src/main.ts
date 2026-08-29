@@ -1,10 +1,19 @@
 import './config/load-env';
 
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
   app.enableCors({ origin: webOrigin, credentials: true });

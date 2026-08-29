@@ -24,6 +24,35 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0008 — Web auth state: token in Zustand, user via TanStack Query
+
+**Date:** 2026-08-29
+**Status:** Accepted
+
+- Only the JWT is persisted (Zustand `persist` → `localStorage`). The authenticated user is
+  **not** stored; it is fetched from `GET /auth/me` through TanStack Query and cached in memory.
+  Avoids a stale user object surviving in storage after role/name changes or logout elsewhere.
+- The axios response interceptor clears the token on any `401`; `ProtectedRoute` handles the
+  redirect. Keeps "session expired" handling in one place.
+- Path alias `@/*` → `src/*` (tsconfig `paths` + Vite `resolve.alias`). No `baseUrl` — TS 6
+  deprecates it and `paths` now resolves relative to the config file.
+
+## ADR-0007 — Jest uses `@swc/jest`; `@nestjs/config` adopted
+
+**Date:** 2026-08-29
+**Status:** Accepted
+
+- `@nestjs/jwt`, `@nestjs/config` and `@nestjs/passport` v12 ship **ESM-only** (no `require`
+  export). Jest (CommonJS) cannot load them under `ts-jest`. Switched the Jest transform to
+  **`@swc/jest`** (`.swcrc` with `legacyDecorator` + `decoratorMetadata`), added a
+  `transformIgnorePatterns` exception so those three packages are transpiled, and a
+  `moduleNameMapper` (`^(\.{1,2}/.*)\.js$` → `$1`) so the Prisma 7 client's `.js` import
+  specifiers resolve to its `.ts` files. `nest build` still uses `tsc` — unaffected.
+- `@nestjs/config` is now in (deferred from Phase 1). It loads the root `.env`
+  (`envFilePath` = `<cwd>/../../.env`) and validates required vars via `class-validator`
+  (`validateEnv`). `src/config/load-env.ts` stays — it runs before Nest DI so `PrismaService`'s
+  constructor still sees `DATABASE_URL`.
+
 ## ADR-0006 — Argon2 via `@node-rs/argon2`, seed/scripts via `tsx`
 
 **Date:** 2026-08-28

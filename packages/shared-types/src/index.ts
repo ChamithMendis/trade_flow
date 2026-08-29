@@ -32,6 +32,9 @@ export enum OrderStatus {
   CANCELLED = 'CANCELLED',
 }
 
+/** Virtual cash every new trader (and the seeded admin) starts with. */
+export const STARTING_CASH = 100_000;
+
 /** Terminal states an order can no longer move out of. */
 export const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = [
   OrderStatus.FILLED,
@@ -61,3 +64,32 @@ export const WsEvent = {
 } as const;
 
 export type WsEventName = (typeof WsEvent)[keyof typeof WsEvent];
+
+// ---------------------------------------------------------------------------
+// Auth contracts (REST)
+// ---------------------------------------------------------------------------
+
+/** The authenticated user shape returned by the API (never includes the hash). */
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  user: AuthUser;
+}
+
+export interface RegisterRequest {
+  name: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}

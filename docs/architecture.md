@@ -45,9 +45,32 @@ idempotency backbone for Phase 5. Money is `Decimal(18,4)`.
 
 `PrismaModule` is `@Global()`, so any module can inject `PrismaService`.
 
+## Authentication
+
+- **Password hashing:** Argon2id via `@node-rs/argon2`.
+- **Tokens:** stateless JWT (`@nestjs/jwt`), `sub` = user id. Secret + TTL from env.
+- **Guard:** `JwtAuthGuard` is registered as a global `APP_GUARD` (Passport `jwt` strategy).
+  Every route needs a valid token unless annotated `@Public()`. `@CurrentUser()` reads the
+  user that `JwtStrategy.validate` (re-fetched from the DB) attached to the request.
+- **Rate limiting:** `@nestjs/throttler` on the `/auth` controller (10 requests / 60s).
+- **Validation:** global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`);
+  DTOs use `class-validator`.
+- **Registration** creates the `User` and its `Portfolio` (100k cash, `STARTING_CASH` from
+  `shared-types`) in one `prisma.user.create` nested write.
+
+### Web auth
+
+- `authStore` (Zustand + `persist`) holds **only** the JWT in `localStorage`.
+- `axios` instance attaches `Authorization: Bearer`; a 401 response clears the token.
+- The current user comes from `GET /auth/me` via TanStack Query (`['auth','me']`), so it is
+  never stale in storage. `ProtectedRoute` gates on token presence + that query succeeding.
+
 ## Phase status
 
 - **Phase 0 — Foundation:** done. Monorepo, TypeScript, lint/format, Docker infra, `/health`.
 - **Phase 1 — Database schema:** done. Prisma schema + `init` migration, `PrismaModule`/`PrismaService`,
   seed (admin user + 5 instruments + admin portfolio).
-- Phases 2–8: see the project specification.
+- **Phase 2 — Auth:** done. `CommonModule` decorators + global JWT guard, `UsersModule`,
+  `AuthModule` (`/auth/register`, `/auth/login`, `/auth/me`), throttling, validation.
+  Web: React Router, TanStack Query, Zustand, Tailwind; login/register pages + protected dashboard.
+- Phases 3–8: see the project specification.
