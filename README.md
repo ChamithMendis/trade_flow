@@ -64,7 +64,9 @@ npm run dev
 - Prisma Studio (browse the DB): `npm run db:studio`
 
 Then open http://localhost:5173, register a trader (you start with $100,000 virtual cash), or
-sign in as the seeded admin: `admin@tradeflow.local` / `admin12345`.
+sign in as the seeded admin: `admin@tradeflow.local` / `admin12345`. The market dashboard
+streams simulated price changes over WebSockets — set `MARKET_TICK_MS` in `.env` to change the
+cadence (`0` disables the price engine).
 
 ## Scripts (run from repo root)
 
@@ -83,5 +85,6 @@ sign in as the seeded admin: `admin@tradeflow.local` / `admin12345`.
 
 ## Build status
 
-Phases 0–2 complete (foundation, database schema, authentication). See `docs/decisions.md` for
-the running decision log and the project specification for the full roadmap.
+Phases 0–3 complete (foundation, database schema, authentication, market dashboard with live
+prices). See `docs/decisions.md` for the running decision log and the project specification for
+the full roadmap.

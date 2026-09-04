@@ -34,7 +34,10 @@
     "@nestjs/jwt": "^12.0.1",
     "@nestjs/passport": "^12.0.0",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.2.3",
+    "@nestjs/schedule": "^12.0.1",
     "@nestjs/throttler": "^6.5.0",
+    "@nestjs/websockets": "^11.2.3",
     "@node-rs/argon2": "^2.1.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
@@ -44,7 +47,8 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -90,7 +94,7 @@
       "^.+\\.(t|j)s$": "@swc/jest"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!(@nestjs/jwt|@nestjs/config|@nestjs/passport)/)"
+      "/node_modules/(?!(@nestjs/jwt|@nestjs/config|@nestjs/passport|@nestjs/schedule)/)"
     ],
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"

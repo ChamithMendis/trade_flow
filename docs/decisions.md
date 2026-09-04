@@ -24,6 +24,36 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0010 — Socket events go through `EventsService`, not the gateway
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- `EventsModule` exports only `EventsService`; the gateway stays private. Market (and later
+  Orders, Exchange, Portfolio) inject the service, so business code never imports a transport
+  class. That keeps the Phase 6 change — JWT handshake auth and per-user rooms — inside one
+  module, and keeps NFR-05 (future service extraction) open.
+- Phase 3 deliberately leaves the socket **unauthenticated**: prices are public market data
+  and every client just joins the `market` room. Per-user authorisation lands in Phase 6 with
+  order events, which are the data that actually needs it.
+
+## ADR-0009 — Price engine: dynamic interval, batched writes
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- Registered via `SchedulerRegistry.addInterval` in `onModuleInit` instead of a static
+  `@Interval(3000)` decorator, because the decorator takes a compile-time constant.
+  `MARKET_TICK_MS` now tunes the cadence and `0` turns the engine off — useful for tests and
+  for a deployment that shouldn't be writing to the DB every 3 seconds.
+- Each tick writes **all** instruments in a single `$transaction` rather than N separate
+  updates, so a tick is atomic and readers never see a half-applied tick.
+- A `running` flag drops a tick if the previous one is still in flight, and the whole body is
+  wrapped in `try/catch` — an unhandled rejection inside `setInterval` would otherwise take
+  down the process.
+- Movement is a bounded random walk (±1% per tick, price floor of 1). Simple and obviously
+  fake, which is the point: the spec explicitly rules out a real matching engine.
+
 ## ADR-0008 — Web auth state: token in Zustand, user via TanStack Query
 
 **Date:** 2026-08-29

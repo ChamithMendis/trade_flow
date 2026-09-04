@@ -1,5 +1,12 @@
 import { plainToInstance } from 'class-transformer';
-import { IsInt, IsString, MinLength, validateSync } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+  validateSync,
+} from 'class-validator';
 
 class EnvVars {
   @IsString()
@@ -17,6 +24,12 @@ class EnvVars {
 
   @IsInt()
   API_PORT!: number;
+
+  /** Price-engine tick in ms; 0 disables it. Defaults to 3000 when unset. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  MARKET_TICK_MS?: number;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvVars {

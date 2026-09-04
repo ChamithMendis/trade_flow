@@ -93,3 +93,29 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
+
+// ---------------------------------------------------------------------------
+// Market contracts
+// ---------------------------------------------------------------------------
+
+/** Socket.IO room every client joins to receive public market data. */
+export const MARKET_ROOM = 'market';
+
+export interface InstrumentDto {
+  id: string;
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  status: InstrumentStatus;
+  updatedAt: string;
+}
+
+/** Payload of the `market.price.updated` event. */
+export interface PriceUpdatePayload {
+  symbol: string;
+  price: number;
+  previousPrice: number;
+  change: number;
+  changePercent: number;
+  at: string;
+}

@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { AppLayout } from '@/components/AppLayout';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { RegisterPage } from '@/features/auth/RegisterPage';
-import { DashboardPage } from '@/pages/DashboardPage';
+import { MarketPage } from '@/pages/MarketPage';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 function App() {
@@ -13,7 +14,9 @@ function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <AppLayout>
+              <MarketPage />
+            </AppLayout>
           </ProtectedRoute>
         }
       />

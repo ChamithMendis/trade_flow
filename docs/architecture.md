@@ -65,6 +65,38 @@ idempotency backbone for Phase 5. Money is `Decimal(18,4)`.
 - The current user comes from `GET /auth/me` via TanStack Query (`['auth','me']`), so it is
   never stale in storage. `ProtectedRoute` gates on token presence + that query succeeding.
 
+## Market data & real time
+
+**`EventsModule`** owns the Socket.IO transport and is the single seam between business
+modules and the wire:
+
+- `EventsGateway` holds the `Server` and, on connect, puts every client in the public
+  `market` room. Phase 6 adds JWT verification here plus a private `user:<id>` room.
+- `EventsService` is what other modules inject (`emitPriceUpdate(...)`), so Market, Orders
+  and Portfolio never import the gateway directly.
+
+**`MarketModule`**
+
+- `GET /instruments`, `GET /instruments/:symbol` (both require a JWT like every other route).
+- `InstrumentsService` also exposes `getEntityBySymbol()` — Orders and Exchange will need the
+  raw `Decimal` price, not the DTO's `number`.
+- `PriceEngineService` registers an interval through `SchedulerRegistry` on module init
+  (rather than a fixed `@Interval(3000)`) so `MARKET_TICK_MS` can tune it and `0` disables it.
+  Each tick: read active instruments → bounded random walk (±1%, floor of 1) → persist all
+  updates in one `$transaction` → broadcast one `market.price.updated` per instrument.
+  A re-entrancy flag skips overlapping ticks; a `try/catch` keeps a failed tick from killing
+  the interval.
+
+### Web market
+
+- `lib/socket.ts` — one shared Socket.IO connection for the app.
+- `useMarketSocket` writes each price tick **directly into the TanStack Query cache**
+  (`queryClient.setQueryData`), so the table re-renders with no refetch and no polling. The
+  instruments query is `staleTime: Infinity` for the same reason.
+- Connection status uses `useSyncExternalStore` — the socket is external state, not React state.
+- `priceHistoryStore` (Zustand) keeps the last 40 ticks per symbol to feed the Recharts
+  sparklines, plus the most recent change percentage.
+
 ## Phase status
 
 - **Phase 0 — Foundation:** done. Monorepo, TypeScript, lint/format, Docker infra, `/health`.
@@ -73,4 +105,6 @@ idempotency backbone for Phase 5. Money is `Decimal(18,4)`.
 - **Phase 2 — Auth:** done. `CommonModule` decorators + global JWT guard, `UsersModule`,
   `AuthModule` (`/auth/register`, `/auth/login`, `/auth/me`), throttling, validation.
   Web: React Router, TanStack Query, Zustand, Tailwind; login/register pages + protected dashboard.
-- Phases 3–8: see the project specification.
+- **Phase 3 — Market dashboard:** done. `EventsModule` (Socket.IO gateway + `EventsService`),
+  `MarketModule` (instruments API + price engine). Web: live instruments table with sparklines.
+- Phases 4–8: see the project specification.
