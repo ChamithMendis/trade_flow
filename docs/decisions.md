@@ -24,6 +24,25 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0011 — `shared-types` ships dual CJS + ESM
+
+**Date:** 2026-09-05
+**Status:** Accepted (supersedes the CJS-only decision in ADR-0001)
+
+- The package was CommonJS-only. That worked while the web app imported **types** from it —
+  TypeScript erases those, so no runtime import ever reached the browser. The first runtime
+  value import (`WsEvent`, Phase 3) broke the dev server with
+  _"does not provide an export named 'WsEvent'"_: Vite serves linked workspace packages as
+  source and does not apply CJS→ESM interop to them.
+- Fixed by emitting both formats via TS project references
+  (`tsconfig.cjs.json` → `dist/cjs`, `tsconfig.esm.json` → `dist/esm`, driven by `tsc -b`)
+  behind a conditional `exports` map with per-condition `types`. Nest and Jest take `require`
+  → CJS; Vite takes `import` → ESM.
+- `scripts/write-esm-marker.mjs` drops `{"type":"module"}` into `dist/esm/` because the package
+  root is `"type": "commonjs"` — without it Node would read the ESM output as CommonJS.
+- **Operational note:** changing an `exports` map requires clearing Vite's cache
+  (`rm -rf apps/web/node_modules/.vite`); it caches resolved paths across restarts.
+
 ## ADR-0010 — Socket events go through `EventsService`, not the gateway
 
 **Date:** 2026-09-05
