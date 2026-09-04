@@ -119,3 +119,64 @@ export interface PriceUpdatePayload {
   changePercent: number;
   at: string;
 }
+
+// ---------------------------------------------------------------------------
+// Order contracts
+// ---------------------------------------------------------------------------
+
+/** Statuses an order can still move out of — i.e. it is still cancellable. */
+export const OPEN_ORDER_STATUSES: readonly OrderStatus[] = [
+  OrderStatus.NEW,
+  OrderStatus.PROCESSING,
+  OrderStatus.PARTIALLY_FILLED,
+];
+
+export function isOpenOrderStatus(status: OrderStatus): boolean {
+  return OPEN_ORDER_STATUSES.includes(status);
+}
+
+export interface ExecutionDto {
+  id: string;
+  quantity: number;
+  executionPrice: number;
+  executionReference: string;
+  executionTime: string;
+}
+
+export interface OrderEventDto {
+  id: string;
+  eventType: OrderEventType;
+  payload: unknown;
+  createdAt: string;
+}
+
+export interface OrderDto {
+  id: string;
+  instrumentId: string;
+  symbol: string;
+  instrumentName: string;
+  side: OrderSide;
+  orderType: OrderType;
+  quantity: number;
+  filledQuantity: number;
+  /** Limit price; null for MARKET orders. */
+  price: number | null;
+  status: OrderStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /orders/:id` — the order plus its execution and event history. */
+export interface OrderDetailDto extends OrderDto {
+  executions: ExecutionDto[];
+  events: OrderEventDto[];
+}
+
+export interface CreateOrderRequest {
+  symbol: string;
+  side: OrderSide;
+  orderType: OrderType;
+  quantity: number;
+  /** Required for LIMIT orders, omitted for MARKET. */
+  price?: number;
+}

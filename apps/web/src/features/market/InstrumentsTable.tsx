@@ -21,7 +21,13 @@ function ChangeBadge({ percent }: { percent: number | undefined }) {
   );
 }
 
-export function InstrumentsTable({ instruments }: { instruments: InstrumentDto[] }) {
+type Props = {
+  instruments: InstrumentDto[];
+  selectedSymbol?: string;
+  onSelect?: (symbol: string) => void;
+};
+
+export function InstrumentsTable({ instruments, selectedSymbol, onSelect }: Props) {
   const history = usePriceHistoryStore((s) => s.history);
   const lastChangePercent = usePriceHistoryStore((s) => s.lastChangePercent);
   const seed = usePriceHistoryStore((s) => s.seed);
@@ -49,8 +55,15 @@ export function InstrumentsTable({ instruments }: { instruments: InstrumentDto[]
         <tbody className="divide-y divide-slate-100">
           {instruments.map((instrument) => {
             const change = lastChangePercent[instrument.symbol];
+            const selected = instrument.symbol === selectedSymbol;
             return (
-              <tr key={instrument.id} className="hover:bg-slate-50">
+              <tr
+                key={instrument.id}
+                onClick={() => onSelect?.(instrument.symbol)}
+                className={`${onSelect ? 'cursor-pointer' : ''} ${
+                  selected ? 'bg-slate-100' : 'hover:bg-slate-50'
+                }`}
+              >
                 <td className="px-4 py-3 font-semibold tracking-tight">{instrument.symbol}</td>
                 <td className="px-4 py-3 text-slate-600">{instrument.name}</td>
                 <td className="px-4 py-3 text-right font-mono tabular-nums">

@@ -97,6 +97,45 @@ modules and the wire:
 - `priceHistoryStore` (Zustand) keeps the last 40 ticks per symbol to feed the Recharts
   sparklines, plus the most recent change percentage.
 
+## Orders
+
+`OrdersModule` — `POST /orders`, `GET /orders?status=`, `GET /orders/:id`, `POST /orders/:id/cancel`.
+
+**Validation (FR-06).** Symbol is upper-cased by a DTO `@Transform`; quantity must be a positive
+integer; a `LIMIT` order requires a price and a `MARKET` order must not carry one. The instrument
+must exist **and** be `ACTIVE`.
+
+**Buying power counts open orders, not just cash.** Checking `availableCash` alone would let a
+trader place five orders that are each affordable but not affordable together — nothing is
+deducted until Phase 7 settles an execution. So the check is:
+
+```
+buyingPower = availableCash - Σ(remaining qty × price basis) over open BUY orders
+sellable    = position.quantity - Σ(remaining qty) over open SELL orders on that instrument
+```
+
+`remaining = quantity - filledQuantity`. The price basis is the limit price, or the instrument's
+live price for a `MARKET` order (an estimate — the real fill price is whatever the simulator
+uses). The whole check-then-insert runs in one interactive `$transaction`, so two concurrent
+submits cannot both pass.
+
+**Ownership.** Every read and the cancel path filter on `userId`, so another trader's order comes
+back as a 404 rather than a 403 — it does not leak that the id exists.
+
+**Cancellation** is allowed only from `NEW` / `PROCESSING` / `PARTIALLY_FILLED`
+(`isOpenOrderStatus` in `shared-types`). Creating and cancelling each append an `OrderEvent`, so
+`GET /orders/:id` returns the full audit trail alongside executions.
+
+### Web orders
+
+- `/` market page: instruments table plus an order ticket; clicking a row selects the instrument.
+  Selection is **derived** during render (falls back to the first instrument) rather than set in
+  an effect.
+- `/orders`: status tabs backed by the API's `status` filter, each tab its own query key.
+- `/orders/:id`: fill progress, average fill price, executions and event history.
+- Number inputs register with `setValueAs` so form values are numeric and the Zod schema's input
+  and output types match — React Hook Form's resolver requires that.
+
 ## Phase status
 
 - **Phase 0 — Foundation:** done. Monorepo, TypeScript, lint/format, Docker infra, `/health`.
@@ -107,4 +146,6 @@ modules and the wire:
   Web: React Router, TanStack Query, Zustand, Tailwind; login/register pages + protected dashboard.
 - **Phase 3 — Market dashboard:** done. `EventsModule` (Socket.IO gateway + `EventsService`),
   `MarketModule` (instruments API + price engine). Web: live instruments table with sparklines.
-- Phases 4–8: see the project specification.
+- **Phase 4 — Order entry:** done. `OrdersModule` (create/list/detail/cancel with buying-power and
+  holdings validation, order events). Web: order ticket, orders list with status tabs, order detail.
+- Phases 5–8: see the project specification.

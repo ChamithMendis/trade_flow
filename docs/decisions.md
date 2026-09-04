@@ -24,6 +24,28 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0012 — Buying power counts open orders; no cash reservation
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- FR-06 only asks for "sufficient virtual cash". Checking `availableCash` alone is not enough:
+  cash is not debited until an execution settles (Phase 7), so a trader could place several
+  orders that are individually affordable but collectively are not.
+- The check therefore subtracts what open orders have already committed:
+  `availableCash − Σ(remaining × basis)` for open BUYs, and
+  `position.quantity − Σ(remaining)` for open SELLs on that instrument.
+- **Rejected alternative:** a real reservation ledger (debit on placement, refund on
+  cancel/reject). More correct, but it needs its own state and unwind paths on every terminal
+  transition — too much for the MVP, and the spec doesn't ask for it. Revisit if Phase 7's
+  settlement makes the derived calculation awkward.
+- For a `MARKET` order the basis is the instrument's live price, so the figure is an estimate;
+  the fill price is whatever the simulator uses. Acceptable for a simulator, and the error is
+  bounded by the ±1% tick.
+- Check and insert share one interactive `$transaction`, so concurrent submits serialise.
+- Reads and cancel are scoped by `userId` and return **404** (not 403) for another trader's
+  order, so the endpoint doesn't confirm the id exists.
+
 ## ADR-0011 — `shared-types` ships dual CJS + ESM
 
 **Date:** 2026-09-05
