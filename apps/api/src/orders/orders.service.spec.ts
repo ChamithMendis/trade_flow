@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrderSide, OrderStatus, OrderType } from '@tradeflow/shared-types';
+import { ExchangeProducer } from '../exchange/exchange.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
@@ -73,9 +74,10 @@ function setup(options: Options = {}) {
         .fn()
         .mockResolvedValue({ id: 'p1', availableCash: cash }),
     },
+    // cancel() locks the row with `SELECT ... FOR UPDATE`, which returns an array.
+    $queryRaw: jest.fn().mockResolvedValue(order ? [order] : []),
     order: {
       findMany: jest.fn().mockResolvedValue(openOrders),
-      findFirst: jest.fn().mockResolvedValue(order),
       create: createOrder,
       update: updateOrder,
     },
@@ -87,7 +89,16 @@ function setup(options: Options = {}) {
     $transaction: (fn: (client: typeof tx) => unknown) => fn(tx),
   } as unknown as PrismaService;
 
-  return { service: new OrdersService(prisma), createOrder, createEvent, tx };
+  const enqueueOrder = jest.fn().mockResolvedValue(undefined);
+  const exchange = { enqueueOrder } as unknown as ExchangeProducer;
+
+  return {
+    service: new OrdersService(prisma, exchange),
+    createOrder,
+    createEvent,
+    enqueueOrder,
+    tx,
+  };
 }
 
 /** The `data` object a prisma `create({ data })` mock was called with. */
@@ -113,6 +124,18 @@ describe('OrdersService.create', () => {
     expect(result.status).toBe(OrderStatus.NEW);
     expect(createArg(createOrder).status).toBe(OrderStatus.NEW);
     expect(createArg(createEvent).eventType).toBe('CREATED');
+  });
+
+  it('queues the order for the exchange once created', async () => {
+    const { service, enqueueOrder } = setup();
+    const result = await service.create('u1', buy());
+    expect(enqueueOrder).toHaveBeenCalledWith(result.id);
+  });
+
+  it('does not queue anything when validation fails', async () => {
+    const { service, enqueueOrder } = setup({ cash: 10 });
+    await expect(service.create('u1', buy())).rejects.toThrow();
+    expect(enqueueOrder).not.toHaveBeenCalled();
   });
 
   it('rejects a buy the trader cannot afford', async () => {

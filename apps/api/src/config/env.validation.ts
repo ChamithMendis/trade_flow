@@ -13,6 +13,9 @@ class EnvVars {
   DATABASE_URL!: string;
 
   @IsString()
+  REDIS_URL!: string;
+
+  @IsString()
   @MinLength(16, { message: 'JWT_SECRET must be at least 16 characters' })
   JWT_SECRET!: string;
 

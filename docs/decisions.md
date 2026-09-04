@@ -24,6 +24,33 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0013 — Exchange: one job per slice, locked transitions
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- **One BullMQ job applies one execution slice**, then enqueues a delayed continuation if
+  quantity remains. Rejected alternative: a single job that sleeps between fills — it pins a
+  worker for the life of the order and makes a retry replay every fill.
+- Job id is `<orderId>-<sequence>`, deterministic from the execution count, so a retry cannot
+  enqueue a duplicate continuation. `-` not `:` — BullMQ rejects `:` in custom ids.
+- **Idempotency** rides on the `executions.executionReference` unique constraint. A replay is
+  caught as Prisma P2002 and reported as `duplicate`; `filledQuantity` never advances twice.
+  Verified against the live database, not just mocks.
+- Two concurrency bugs found by the end-to-end test and fixed:
+  - `applyExecution` and `cancel` both take `SELECT ... FOR UPDATE` on the order row. Without
+    it, `READ COMMITTED` let a fill commit over a cancel and revive the order as `FILLED`.
+  - `NEW → PROCESSING` / `NEW → REJECTED` use `updateMany` with a `status: NEW` filter so the
+    guard and the write are one atomic statement. The unconditional update was resurrecting
+    orders that had just been cancelled.
+- Enqueue happens **after** the create transaction commits — otherwise the worker can race
+  ahead of the order becoming visible.
+- Cancellation does not remove queued jobs; the worker's status check makes them no-ops. Fewer
+  moving parts than reaching into the queue, and it is the behaviour the spec's "a cancelled
+  order cannot receive new execution processing" scenario actually asks for.
+- `LIMIT` orders are clamped to their limit price rather than resting unfilled. Not how a real
+  book works, but the spec explicitly excludes a matching engine and orders need to complete.
+
 ## ADR-0012 — Buying power counts open orders; no cash reservation
 
 **Date:** 2026-09-05

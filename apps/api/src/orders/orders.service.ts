@@ -14,6 +14,7 @@ import {
   type OrderDetailDto,
   type OrderDto,
 } from '@tradeflow/shared-types';
+import { ExchangeProducer } from '../exchange/exchange.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ListOrdersDto } from './dto/list-orders.dto';
@@ -28,16 +29,26 @@ const instrumentSelect = {
   instrument: { select: { symbol: true, name: true } },
 };
 
+/** Shape of the locked row read back by `SELECT ... FOR UPDATE`. */
+interface LockedOrderRow {
+  id: string;
+  status: string;
+  filledQuantity: number;
+}
+
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly exchange: ExchangeProducer,
+  ) {}
 
   async create(userId: string, dto: CreateOrderDto): Promise<OrderDto> {
     this.assertPriceMatchesType(dto);
 
     // One interactive transaction so two concurrent submits cannot both pass
     // the buying-power check.
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       const instrument = await tx.instrument.findUnique({
         where: { symbol: dto.symbol },
       });
@@ -143,6 +154,12 @@ export class OrdersService {
 
       return toOrderDto(order);
     });
+
+    // Queued only after the transaction commits, so the worker can never pick
+    // up an order that isn't visible yet.
+    await this.exchange.enqueueOrder(order.id);
+
+    return order;
   }
 
   async findAllForUser(
@@ -178,9 +195,14 @@ export class OrdersService {
 
   async cancel(userId: string, orderId: string): Promise<OrderDto> {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.order.findFirst({
-        where: { id: orderId, userId },
-      });
+      // Locked so a fill landing at the same moment cannot overwrite the
+      // cancel (and vice versa) — the exchange worker takes the same lock.
+      const [existing] = await tx.$queryRaw<LockedOrderRow[]>`
+        SELECT id, status, "filledQuantity"
+        FROM orders
+        WHERE id = ${orderId} AND "userId" = ${userId}
+        FOR UPDATE
+      `;
       if (!existing) {
         throw new NotFoundException(`Order '${orderId}' not found`);
       }

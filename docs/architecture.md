@@ -136,6 +136,48 @@ back as a 404 rather than a 403 — it does not leak that the id exists.
 - Number inputs register with `setValueAs` so form values are numeric and the Zod schema's input
   and output types match — React Hook Form's resolver requires that.
 
+## Exchange simulator
+
+`ExchangeModule` — a BullMQ worker on the `exchange` queue (Redis), plus `ExecutionService`,
+which is the only code allowed to move an order's fill state.
+
+**One job = one execution slice.** Rather than a single long job that sleeps between partial
+fills, each job applies one slice and, if quantity remains, enqueues a delayed continuation. The
+worker stays free between fills and every step is independently retryable
+(`attempts: 3`, exponential backoff, failures retained for inspection).
+
+**Job ids are deterministic:** `<orderId>-<sequence>`, where sequence is the order's current
+execution count. BullMQ ignores an `add` for an id it already knows, so a retried job cannot
+enqueue a second continuation. The separator is `-` because BullMQ rejects `:` in custom ids.
+
+**Idempotency (NFR-04).** Every execution carries `executionReference = <orderId>:<sequence>`,
+and that column is `@unique`. A replayed event loses the insert race, is caught as a P2002
+violation, and returns `{ applied: false, reason: 'duplicate' }` — `filledQuantity` never moves
+twice. The execution row, the order's new fill state and the order event all commit in one
+transaction.
+
+**Two races the design has to survive**, both against a concurrent cancel:
+
+1. _Fill overwrites cancel._ `applyExecution` re-reads the order with
+   `SELECT ... FOR UPDATE`, and `OrdersService.cancel` takes the same lock. Under
+   `READ COMMITTED` a plain read would let a cancel commit between the status check and the
+   update, and the update would silently revive the order as `FILLED`.
+2. _Accept revives a cancelled order._ The `NEW → PROCESSING` and `NEW → REJECTED` transitions
+   use `updateMany({ where: { id, status: NEW } })`, which compiles to
+   `UPDATE ... WHERE status = 'NEW'` — guard and write in one atomic statement. An unconditional
+   update would resurrect an order cancelled moments earlier. The order event is only written if
+   that statement matched a row.
+
+**Fill behaviour.** ~40% of the time the remainder fills in one go; otherwise a 25–75% slice, so
+orders visibly pass through `PARTIALLY_FILLED`. `MARKET` fills at the live price with slight
+slippage; `LIMIT` is clamped so it never fills worse than its limit — there is no order book, and
+the spec rules out a real matching engine. Tunable via `EXCHANGE_REJECT_RATE`,
+`EXCHANGE_MIN_DELAY_MS`, `EXCHANGE_MAX_DELAY_MS`.
+
+Orders are enqueued **after** the create transaction commits, so the worker can never pick up an
+order that isn't visible yet. Cancelling does not hunt down queued jobs — the worker's status
+check turns them into no-ops.
+
 ## Phase status
 
 - **Phase 0 — Foundation:** done. Monorepo, TypeScript, lint/format, Docker infra, `/health`.
@@ -148,4 +190,6 @@ back as a 404 rather than a 403 — it does not leak that the id exists.
   `MarketModule` (instruments API + price engine). Web: live instruments table with sparklines.
 - **Phase 4 — Order entry:** done. `OrdersModule` (create/list/detail/cancel with buying-power and
   holdings validation, order events). Web: order ticket, orders list with status tabs, order detail.
-- Phases 5–8: see the project specification.
+- **Phase 5 — Exchange simulator:** done. `ExchangeModule` (BullMQ worker, idempotent
+  `ExecutionService`, partial fills, rejections, row-locked state transitions).
+- Phases 6–8: see the project specification.
