@@ -60,6 +60,7 @@ npm run dev
 
 - Web: http://localhost:5173
 - API: http://localhost:3000
+- **API docs (Swagger): http://localhost:3000/docs**
 - API health check: http://localhost:3000/health
 - Prisma Studio (browse the DB): `npm run db:studio`
 
@@ -83,8 +84,41 @@ cadence (`0` disables the price engine).
 | `npm run db:seed`    | seed reference data                           |
 | `npm run db:studio`  | open Prisma Studio                            |
 
+Per-app: `npm test -w @tradeflow/api` (unit) and `npm run test:e2e -w @tradeflow/api`
+(the specification's critical scenarios, against a real Postgres and Redis).
+
+## Tests
+
+Unit tests cover order validation, the price engine, settlement arithmetic and idempotent
+execution handling. The end-to-end suite in `apps/api/test/critical-scenarios.e2e-spec.ts` runs
+the eight scenarios from §14 of the specification against real infrastructure:
+
+1. A user cannot buy shares without sufficient virtual cash.
+2. A user cannot sell more shares than they own.
+3. An order can move through multiple partial fills.
+4. A fully filled order cannot be cancelled.
+5. A cancelled order cannot receive new execution processing.
+6. The same execution processed twice does not change the portfolio twice.
+7. A user cannot access another user's orders or portfolio.
+8. WebSocket clients receive only their own events.
+
+```bash
+npm run infra:up                       # Postgres + Redis must be running
+npm run test:e2e -w @tradeflow/api
+```
+
+## Running the whole stack in Docker
+
+```bash
+docker compose --profile full up -d --build   # web on :8080, api on :3000
+docker compose exec api npx prisma db seed
+```
+
+See [docs/deployment.md](docs/deployment.md) for hosted deployment.
+
 ## Build status
 
-Phases 0–7 complete (foundation, database schema, authentication, market dashboard with live
-prices, order entry, exchange simulator, real-time order updates, portfolio). See
-`docs/decisions.md` for the running decision log and the project specification for the roadmap.
+All eight phases complete: foundation, database schema, authentication, market dashboard with
+live prices, order entry, exchange simulator, real-time order updates, portfolio, and quality
+tooling (tests, OpenAPI docs, containers, CI). See `docs/decisions.md` for the running decision
+log and `docs/architecture.md` for how the pieces fit together.

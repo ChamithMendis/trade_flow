@@ -1,10 +1,10 @@
 import { config as loadEnv } from 'dotenv';
 import { resolve } from 'node:path';
 import { hash } from '@node-rs/argon2';
-import { PrismaClient } from '../src/generated/prisma/client';
-import { createPrismaAdapter } from '../src/prisma/prisma-adapter';
+import { PrismaClient } from '../generated/prisma/client';
+import { createPrismaAdapter } from './prisma-adapter';
 
-loadEnv({ path: resolve(__dirname, '../../../.env') });
+loadEnv({ path: resolve(process.cwd(), '../../.env') });
 
 const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 

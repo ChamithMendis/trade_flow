@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tradeflow
+          POSTGRES_PASSWORD: tradeflow
+          POSTGRES_DB: tradeflow
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tradeflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      API_PORT: 3000
+      WEB_ORIGIN: http://localhost:5173
+      DATABASE_URL: postgresql://tradeflow:tradeflow@localhost:5432/tradeflow?schema=public
+      REDIS_URL: redis://localhost:6379
+      # CI-only secret; the real one comes from the deployment environment.
+      JWT_SECRET: ci-secret-value-at-least-16-chars
+      JWT_EXPIRES_IN: 1d
+      MARKET_TICK_MS: 0
+      EXCHANGE_REJECT_RATE: 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` runs the api's postinstall, which needs DATABASE_URL present.
+      - name: Install dependencies
+        run: npm ci
+
+      # The API and the e2e suite read the repo-root .env.
+      - name: Write .env for the workspace
+        run: |
+          {
+            echo "API_PORT=$API_PORT"
+            echo "WEB_ORIGIN=$WEB_ORIGIN"
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "REDIS_URL=$REDIS_URL"
+            echo "JWT_SECRET=$JWT_SECRET"
+            echo "JWT_EXPIRES_IN=$JWT_EXPIRES_IN"
+            echo "MARKET_TICK_MS=$MARKET_TICK_MS"
+            echo "EXCHANGE_REJECT_RATE=$EXCHANGE_REJECT_RATE"
+          } > .env
+
+      - name: Build shared types
+        run: npm run build -w @tradeflow/shared-types
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Apply migrations
+        run: npm run prisma:deploy -w @tradeflow/api
+
+      - name: Seed reference data
+        run: npm run prisma:seed -w @tradeflow/api
+
+      - name: Unit tests
+        run: npm test -w @tradeflow/api
+
+      - name: End-to-end tests (spec §14 scenarios)
+        run: npm run test:e2e -w @tradeflow/api
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

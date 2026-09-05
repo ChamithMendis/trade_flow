@@ -24,6 +24,65 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0018 — Container image: install as `node`, scope the workspaces, compile the seed
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+Three problems, each only found by actually running the image rather than just building it.
+
+- **Prisma could not write its engines.** The runtime stage ran `npm ci` as root then dropped to
+  `USER node`, so `node_modules` was root-owned and the container crash-looped. Fixed by creating
+  `/repo` owned by `node` and switching user _before_ installing. A `chown -R` afterwards also
+  works but duplicates every file into a new layer — it took the image from 282MB to **1.13GB**.
+- **The API image carried the web app's dependencies.** An unscoped workspace install pulls in
+  React, Recharts and friends. Scoping to
+  `--workspace @tradeflow/api --workspace @tradeflow/shared-types --include-workspace-root`
+  brought the image to **266MB**.
+- **`prisma db seed` failed in the container.** The seed lived in `prisma/seed.ts` and imported
+  `../src/...` TypeScript sources, which the runtime image does not ship. Moving it to
+  `src/prisma/seed.ts` means `nest build` compiles it into `dist`, and `prisma7.config.ts` picks
+  the compiled path when `NODE_ENV=production` and `tsx` on the source otherwise. This also let
+  `tsx` stay a devDependency.
+
+The lesson worth keeping: a Dockerfile that builds is not a Dockerfile that works. Every one of
+these passed `docker build` and failed at `docker compose up`.
+
+## ADR-0016 — Pin the public npm registry in the repo
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- The Docker build failed with `npm error code E401`. Every one of the 1141 `resolved` URLs in
+  `package-lock.json` pointed at a **private corporate registry** the development machine is
+  globally configured for via `~/.npmrc`. The container has no credentials for it, and neither
+  would GitHub Actions or anyone cloning the repository — which defeats the point of a public
+  portfolio project.
+- Added a repo-level **`.npmrc` pinning `registry=https://registry.npmjs.org/`** and regenerated
+  the lockfile from a clean `node_modules`. A repo-level file beats relying on the machine's
+  global config, which is exactly what caused the problem.
+- `npm install --package-lock-only` was **not** enough: it preserved the existing `resolved`
+  URLs, and a subsequent attempt produced a lockfile with zero `integrity` hashes. Only removing
+  `node_modules` and the lockfile together forced a full re-resolution with integrity pinning.
+
+## ADR-0017 — End-to-end tests drive services directly where randomness would flake
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- `apps/api/test/critical-scenarios.e2e-spec.ts` covers all eight §14 scenarios against real
+  Postgres and Redis.
+- Scenarios about partial fills, cancellation and idempotency call `ExecutionService` **directly**
+  and create their orders straight through Prisma. Going through HTTP would queue a job, and the
+  simulator's randomness (which slice size, whether it rejects) would make the assertions a race.
+  Driving the service asserts the guarantee itself; the HTTP path is covered by the scenarios
+  where determinism isn't needed.
+- The suite sets `MARKET_TICK_MS=0` and `EXCHANGE_REJECT_RATE=0` before importing `AppModule`, so
+  the background engines don't churn data underneath the assertions.
+- `jest-e2e.json` had to move from `ts-jest` to `@swc/jest` with the same
+  `transformIgnorePatterns` as the unit config — the scaffolded config could not load the
+  ESM-only Nest packages (ADR-0007).
+
 ## ADR-0015 — Settlement runs inside the execution transaction
 
 **Date:** 2026-09-05

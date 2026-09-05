@@ -31,6 +31,49 @@ services:
       timeout: 5s
       retries: 5
 
+  # The two app services sit behind the `full` profile, so the default
+  # `docker compose up -d` still starts only Postgres + Redis for local dev.
+  # Whole stack in containers:  docker compose --profile full up -d --build
+  api:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: tradeflow-api
+    restart: unless-stopped
+    environment:
+      API_PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tradeflow}:${POSTGRES_PASSWORD:-tradeflow}@postgres:5432/${POSTGRES_DB:-tradeflow}?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-real-env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      MARKET_TICK_MS: ${MARKET_TICK_MS:-3000}
+      EXCHANGE_REJECT_RATE: ${EXCHANGE_REJECT_RATE:-0.1}
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Vite inlines these at build time, so they are args, not env vars.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_WS_URL: ${VITE_WS_URL:-http://localhost:3000}
+    container_name: tradeflow-web
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
 volumes:
   tradeflow-pgdata:
   tradeflow-redisdata:
