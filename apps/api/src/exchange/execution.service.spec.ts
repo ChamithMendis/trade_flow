@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { OrderSide, OrderStatus } from '@tradeflow/shared-types';
+import { SettlementService } from '../portfolio/settlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExecutionService } from './execution.service';
 
@@ -54,11 +55,15 @@ function setup(options: Options = {}) {
     execution: { count: jest.fn().mockResolvedValue(0) },
   } as unknown as PrismaService;
 
+  const settle = jest.fn().mockResolvedValue(undefined);
+  const settlement = { settle } as unknown as SettlementService;
+
   return {
-    service: new ExecutionService(prisma),
+    service: new ExecutionService(prisma, settlement),
     updateOrder,
     createEvent,
     createExecution,
+    settle,
   };
 }
 
@@ -119,12 +124,31 @@ describe('ExecutionService', () => {
     expect(eventArg(createEvent).eventType).toBe('FILLED');
   });
 
+  it('settles the execution in the same transaction', async () => {
+    const { service, settle } = setup();
+
+    await service.applyExecution(input);
+
+    expect(settle).toHaveBeenCalledTimes(1);
+    const [, settleInput] = settle.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
+    expect(settleInput).toMatchObject({
+      userId: 'u1',
+      instrumentId: 'i1',
+      side: OrderSide.BUY,
+      quantity: 4,
+      executionPrice: 100,
+    });
+  });
+
   // NFR-04: the whole point of the unique executionReference.
-  it('ignores a duplicate execution reference and does not move the fill', async () => {
+  it('ignores a duplicate execution reference and does not move the fill or settle', async () => {
     const logged = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
-    const { service, updateOrder } = setup({
+    const { service, updateOrder, settle } = setup({
       executionThrows: new UniqueViolation(),
     });
 
@@ -132,7 +156,48 @@ describe('ExecutionService', () => {
 
     expect(result).toEqual({ applied: false, reason: 'duplicate' });
     expect(updateOrder).not.toHaveBeenCalled();
+    expect(settle).not.toHaveBeenCalled();
     logged.mockRestore();
+  });
+
+  it('does not settle against a cancelled order', async () => {
+    const { service, settle } = setup({
+      order: {
+        id: 'o1',
+        status: OrderStatus.CANCELLED,
+        quantity: 10,
+        filledQuantity: 2,
+        side: OrderSide.BUY,
+        userId: 'u1',
+        instrumentId: 'i1',
+      },
+    });
+
+    await service.applyExecution(input);
+
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it('settles only the clamped quantity, never more than remains', async () => {
+    const { service, settle } = setup({
+      order: {
+        id: 'o1',
+        status: OrderStatus.PARTIALLY_FILLED,
+        quantity: 10,
+        filledQuantity: 8,
+        side: OrderSide.BUY,
+        userId: 'u1',
+        instrumentId: 'i1',
+      },
+    });
+
+    await service.applyExecution({ ...input, quantity: 5 });
+
+    const [, settleInput] = settle.mock.calls[0] as [
+      unknown,
+      { quantity: number },
+    ];
+    expect(settleInput.quantity).toBe(2);
   });
 
   it('refuses to execute against a cancelled order', async () => {

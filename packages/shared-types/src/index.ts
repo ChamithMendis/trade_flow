@@ -206,3 +206,52 @@ export interface CreateOrderRequest {
   /** Required for LIMIT orders, omitted for MARKET. */
   price?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Portfolio contracts
+// ---------------------------------------------------------------------------
+
+export interface PositionDto {
+  instrumentId: string;
+  symbol: string;
+  instrumentName: string;
+  quantity: number;
+  /** Weighted average price paid per share. */
+  averagePrice: number;
+  currentPrice: number;
+  /** quantity × averagePrice */
+  costBasis: number;
+  /** quantity × currentPrice */
+  marketValue: number;
+  /** marketValue − costBasis */
+  unrealizedPnL: number;
+  /** unrealizedPnL as a percentage of costBasis. */
+  unrealizedPnLPercent: number;
+  updatedAt: string;
+}
+
+export interface PortfolioSummaryDto {
+  availableCash: number;
+  positions: PositionDto[];
+  /** Σ position.marketValue */
+  holdingsValue: number;
+  /** Σ position.costBasis */
+  costBasis: number;
+  /** availableCash + holdingsValue */
+  totalValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+}
+
+/** One execution, flattened with its order for the transaction history. */
+export interface TransactionDto {
+  id: string;
+  orderId: string;
+  symbol: string;
+  side: OrderSide;
+  quantity: number;
+  executionPrice: number;
+  /** quantity × executionPrice */
+  value: number;
+  executionTime: string;
+}

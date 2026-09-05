@@ -12,6 +12,7 @@ import { EventsModule } from './events/events.module';
 import { ExchangeModule } from './exchange/exchange.module';
 import { MarketModule } from './market/market.module';
 import { OrdersModule } from './orders/orders.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     MarketModule,
+    PortfolioModule,
     ExchangeModule,
     OrdersModule,
   ],

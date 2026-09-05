@@ -24,6 +24,33 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0015 — Settlement runs inside the execution transaction
+
+**Date:** 2026-09-05
+**Status:** Accepted
+
+- `SettlementService.settle(tx, ...)` **takes the caller's transaction client** instead of
+  opening its own, so cash and positions move in the same transaction as the `executions`
+  insert. This is what extends NFR-04 to the portfolio: a replayed execution fails the unique
+  `executionReference`, the transaction rolls back, and the cash movement rolls back with it.
+  Settling in a separate transaction would keep `filledQuantity` correct while still
+  double-charging the trader — the subtler and more damaging half of the bug.
+  Verified against the real database: replaying a reference left cash, share count and
+  `filledQuantity` all unchanged.
+- Portfolio and position rows are read `FOR UPDATE`. Two executions settling for one trader
+  would otherwise both read the same starting cash and one update would be lost — the same class
+  of bug found in Phase 5.
+- **Weighted average cost** on buys; sells leave the average alone (it is the cost of what
+  remains) and delete the row at zero. Realized P/L is explicitly a V2 item in the spec, so it
+  is not tracked.
+- Market value, cost basis and unrealized P/L are **computed on read** from the live price, never
+  stored — otherwise every price tick would have to rewrite every position row.
+- `PortfolioModule` imports nothing from Exchange; ExchangeModule imports it. The reverse would
+  be circular, the same trap that put `OrderNotifier` in `events/` (ADR-0014).
+- Money stays `number` + round-to-4dp, consistent with the rest of the codebase. Values here are
+  ~1e5 with 4 decimals, far inside double precision, and every step is rounded so error cannot
+  accumulate. A `Decimal` type end to end would be the right call at real scale.
+
 ## ADR-0014 — Socket auth in middleware; per-user rooms
 
 **Date:** 2026-09-05

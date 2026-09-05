@@ -196,6 +196,44 @@ Orders are enqueued **after** the create transaction commits, so the worker can 
 order that isn't visible yet. Cancelling does not hunt down queued jobs — the worker's status
 check turns them into no-ops.
 
+## Portfolio
+
+`PortfolioModule` — `GET /portfolio`, `/portfolio/positions`, `/portfolio/transactions`.
+
+**Settlement shares the execution's transaction.** `SettlementService.settle(tx, ...)` takes the
+caller's `Prisma.TransactionClient` rather than opening its own, because it runs inside
+`ExecutionService.applyExecution`. That is the whole idempotency story: a replayed execution
+fails the unique `executionReference` insert, the transaction rolls back, and **cash and
+positions roll back with it**. Settlement in its own transaction would satisfy the order-level
+guarantee while still double-charging the portfolio.
+
+Per execution:
+
+| Side | Cash                 | Position                                                        |
+| ---- | -------------------- | --------------------------------------------------------------- |
+| BUY  | `− quantity × price` | upsert; `newAvg = (oldQty·oldAvg + qty·price) / (oldQty + qty)` |
+| SELL | `+ quantity × price` | `quantity −= qty`; row deleted at zero                          |
+
+Selling leaves the average cost alone — it is the cost of what remains. Realized P/L is a V2
+item per the spec, so nothing records it.
+
+Both the portfolio row and the position row are read with `SELECT ... FOR UPDATE`, so two
+executions settling for one trader serialise instead of both reading the same starting balance.
+
+**Derived on read, never stored:** market value, cost basis and unrealized P/L are computed from
+the instrument's live price when the endpoint is called. Storing them would mean every price
+tick had to rewrite every position row.
+
+`PortfolioModule` deliberately imports nothing from Exchange — ExchangeModule imports _it_, so a
+dependency the other way would be circular.
+
+### Web portfolio
+
+- `/portfolio`: value/cash/holdings/P&L cards, positions table, Recharts allocation donut
+  (positions plus cash), and the execution history.
+- `usePortfolioSocket` invalidates on `portfolio.updated`. Unlike order events the payload is
+  just a signal — the numbers are derived from live prices, so there is nothing to patch in place.
+
 ## Phase status
 
 - **Phase 0 — Foundation:** done. Monorepo, TypeScript, lint/format, Docker infra, `/health`.
@@ -212,4 +250,7 @@ check turns them into no-ops.
   `ExecutionService`, partial fills, rejections, row-locked state transitions).
 - **Phase 6 — Real-time order updates:** done. JWT handshake middleware, per-user rooms,
   `OrderNotifier`; web patches order caches from socket events and toasts terminal outcomes.
-- Phases 7–8: see the project specification.
+- **Phase 7 — Portfolio:** done. `SettlementService` inside the execution transaction (weighted
+  average cost, row-locked cash and positions), portfolio/positions/transactions endpoints,
+  web portfolio page with allocation chart.
+- Phase 8 — Quality and deployment: see the project specification.

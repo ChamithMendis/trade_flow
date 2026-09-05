@@ -10,6 +10,7 @@ import {
   isOpenOrderStatus,
 } from '@tradeflow/shared-types';
 import type { Job } from 'bullmq';
+import { EventsService } from '../events/events.service';
 import { OrderNotifier } from '../events/order-notifier.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXCHANGE_QUEUE, type ProcessOrderJobData } from './exchange.constants';
@@ -39,6 +40,7 @@ export class ExchangeProcessor extends WorkerHost {
     private readonly executions: ExecutionService,
     private readonly producer: ExchangeProducer,
     private readonly notifier: OrderNotifier,
+    private readonly events: EventsService,
     private readonly config: ConfigService,
   ) {
     super();
@@ -108,6 +110,8 @@ export class ExchangeProcessor extends WorkerHost {
         ? WsEvent.ORDER_FILLED
         : WsEvent.ORDER_PARTIALLY_FILLED,
     );
+    // The execution moved cash and positions, so the portfolio is stale too.
+    this.events.emitPortfolioUpdated(result.userId);
 
     if (result.status === OrderStatus.PARTIALLY_FILLED) {
       // Queue the next slice; the job id is keyed on the new execution count so

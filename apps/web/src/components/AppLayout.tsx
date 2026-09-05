@@ -8,6 +8,7 @@ import { Toaster } from './Toaster';
 const NAV = [
   { to: '/', label: 'Market', end: true },
   { to: '/orders', label: 'Orders', end: false },
+  { to: '/portfolio', label: 'Portfolio', end: false },
 ];
 
 export function AppLayout({ children }: { children: ReactNode }) {

@@ -29,4 +29,9 @@ export class EventsService {
   emitOrderEvent(userId: string, event: OrderEventName, order: OrderDto): void {
     this.gateway.server?.to(userRoom(userId)).emit(event, order);
   }
+
+  /** Tells one trader their cash or positions moved. */
+  emitPortfolioUpdated(userId: string): void {
+    this.gateway.server?.to(userRoom(userId)).emit(WsEvent.PORTFOLIO_UPDATED);
+  }
 }

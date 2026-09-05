@@ -6,6 +6,7 @@ import { RegisterPage } from '@/features/auth/RegisterPage';
 import { MarketPage } from '@/pages/MarketPage';
 import { OrderDetailPage } from '@/pages/OrderDetailPage';
 import { OrdersPage } from '@/pages/OrdersPage';
+import { PortfolioPage } from '@/pages/PortfolioPage';
 import { ProtectedRoute } from '@/routes/ProtectedRoute';
 
 function Private({ children }: { children: ReactNode }) {
@@ -42,6 +43,14 @@ function App() {
         element={
           <Private>
             <OrderDetailPage />
+          </Private>
+        }
+      />
+      <Route
+        path="/portfolio"
+        element={
+          <Private>
+            <PortfolioPage />
           </Private>
         }
       />

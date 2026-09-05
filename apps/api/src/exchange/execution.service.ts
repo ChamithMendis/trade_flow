@@ -5,6 +5,7 @@ import {
   isOpenOrderStatus,
   type OrderSide,
 } from '@tradeflow/shared-types';
+import { SettlementService } from '../portfolio/settlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Prisma's unique-constraint violation. */
@@ -54,14 +55,18 @@ export type ApplyExecutionResult =
  * `executions.executionReference` carries a unique constraint, so a replayed or
  * duplicated event loses the insert race and is reported as `duplicate` instead
  * of moving `filledQuantity` a second time (NFR-04). Everything below happens in
- * one transaction, so the execution row and the order's new fill state commit
- * together or not at all.
+ * one transaction, so the execution row, the order's new fill state **and the
+ * portfolio settlement** commit together or not at all — which is what extends
+ * the idempotency guarantee to cash and positions.
  */
 @Injectable()
 export class ExecutionService {
   private readonly logger = new Logger(ExecutionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settlement: SettlementService,
+  ) {}
 
   async applyExecution(
     input: ApplyExecutionInput,
@@ -124,6 +129,16 @@ export class ExecutionService {
               remaining: order.quantity - filledQuantity,
             },
           },
+        });
+
+        // Same transaction as the execution insert above, so a replayed
+        // execution rolls the cash and position changes back with it.
+        await this.settlement.settle(tx, {
+          userId: order.userId,
+          instrumentId: order.instrumentId,
+          side: order.side as OrderSide,
+          quantity,
+          executionPrice: input.executionPrice,
         });
 
         return {
