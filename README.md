@@ -85,6 +85,6 @@ cadence (`0` disables the price engine).
 
 ## Build status
 
-Phases 0–5 complete (foundation, database schema, authentication, market dashboard with live
-prices, order entry, exchange simulator). See `docs/decisions.md` for the running decision log
-and the project specification for the full roadmap.
+Phases 0–6 complete (foundation, database schema, authentication, market dashboard with live
+prices, order entry, exchange simulator, real-time order updates). See `docs/decisions.md` for
+the running decision log and the project specification for the full roadmap.

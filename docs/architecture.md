@@ -70,10 +70,20 @@ idempotency backbone for Phase 5. Money is `Decimal(18,4)`.
 **`EventsModule`** owns the Socket.IO transport and is the single seam between business
 modules and the wire:
 
-- `EventsGateway` holds the `Server` and, on connect, puts every client in the public
-  `market` room. Phase 6 adds JWT verification here plus a private `user:<id>` room.
-- `EventsService` is what other modules inject (`emitPriceUpdate(...)`), so Market, Orders
-  and Portfolio never import the gateway directly.
+- **Handshake auth runs as Socket.IO middleware** (`server.use` in `afterInit`), not in
+  `handleConnection`. Middleware refuses the handshake and the client sees `connect_error`;
+  disconnecting inside `handleConnection` lets the connection open first and only then tears it
+  down, which the client briefly observes as a successful connect.
+- On connect the client joins the shared `market` room **and** a private `user:<id>` room.
+  Order events go only to that private room, so a trader can never receive another's (spec §14).
+- `EventsService` is what other modules inject (`emitPriceUpdate`, `emitOrderEvent`), so Market,
+  Orders and Exchange never import the gateway directly.
+- `OrderNotifier` loads an order and pushes it to its owner. It lives in `events/` rather than
+  `orders/` because OrdersModule already imports ExchangeModule — putting it in `orders/` would
+  make those two modules circular. Importing the pure `toOrderDto` mapper creates no such cycle.
+
+Every emit happens **after** its transaction commits, so a client never sees an order state the
+database hasn't durably accepted.
 
 **`MarketModule`**
 
@@ -135,6 +145,14 @@ back as a 404 rather than a 403 — it does not leak that the id exists.
 - `/orders/:id`: fill progress, average fill price, executions and event history.
 - Number inputs register with `setValueAs` so form values are numeric and the Zod schema's input
   and output types match — React Hook Form's resolver requires that.
+- `useOrderSocket` (mounted once in `AppLayout`) writes each order event into the cached lists,
+  honouring each list's status filter: an order moving `NEW → FILLED` is removed from the "New"
+  tab and inserted into "Filled" with no refetch. The detail query is patched with the fields the
+  event carries and then invalidated, because only a refetch brings the new executions.
+- `useSocketConnection` opens the socket while a token exists and closes it on sign-out. The
+  socket's `auth` is a **callback**, so reconnects read the current token instead of replaying a
+  stale one.
+- Terminal outcomes (filled, rejected, cancelled) raise a toast from a small Zustand store.
 
 ## Exchange simulator
 
@@ -192,4 +210,6 @@ check turns them into no-ops.
   holdings validation, order events). Web: order ticket, orders list with status tabs, order detail.
 - **Phase 5 — Exchange simulator:** done. `ExchangeModule` (BullMQ worker, idempotent
   `ExecutionService`, partial fills, rejections, row-locked state transitions).
-- Phases 6–8: see the project specification.
+- **Phase 6 — Real-time order updates:** done. JWT handshake middleware, per-user rooms,
+  `OrderNotifier`; web patches order caches from socket events and toasts terminal outcomes.
+- Phases 7–8: see the project specification.

@@ -6,9 +6,11 @@ import {
   OrderSide,
   OrderStatus,
   OrderType,
+  WsEvent,
   isOpenOrderStatus,
 } from '@tradeflow/shared-types';
 import type { Job } from 'bullmq';
+import { OrderNotifier } from '../events/order-notifier.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXCHANGE_QUEUE, type ProcessOrderJobData } from './exchange.constants';
 import { ExchangeProducer } from './exchange.producer';
@@ -36,6 +38,7 @@ export class ExchangeProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly executions: ExecutionService,
     private readonly producer: ExchangeProducer,
+    private readonly notifier: OrderNotifier,
     private readonly config: ConfigService,
   ) {
     super();
@@ -99,6 +102,13 @@ export class ExchangeProcessor extends WorkerHost {
       return `not-applied:${result.reason}`;
     }
 
+    await this.notifier.notify(
+      orderId,
+      result.status === OrderStatus.FILLED
+        ? WsEvent.ORDER_FILLED
+        : WsEvent.ORDER_PARTIALLY_FILLED,
+    );
+
     if (result.status === OrderStatus.PARTIALLY_FILLED) {
       // Queue the next slice; the job id is keyed on the new execution count so
       // a retry of this job cannot enqueue a second continuation.
@@ -156,12 +166,16 @@ export class ExchangeProcessor extends WorkerHost {
 
   /** Returns false if the order stopped being NEW before we got here. */
   private async markProcessing(orderId: string): Promise<boolean> {
-    return this.transitionFromNew(
+    const accepted = await this.transitionFromNew(
       orderId,
       OrderStatus.PROCESSING,
       OrderEventType.PROCESSING,
       { acceptedAt: new Date().toISOString() },
     );
+    if (accepted) {
+      await this.notifier.notify(orderId, WsEvent.ORDER_UPDATED);
+    }
+    return accepted;
   }
 
   /** Returns false if the order stopped being NEW before we got here. */
@@ -174,6 +188,7 @@ export class ExchangeProcessor extends WorkerHost {
     );
     if (rejected) {
       this.logger.log(`Order ${orderId} rejected`);
+      await this.notifier.notify(orderId, WsEvent.ORDER_REJECTED);
     }
     return rejected;
   }

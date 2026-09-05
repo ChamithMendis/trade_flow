@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useCurrentUser, useLogout } from '@/features/auth/auth.api';
+import { useOrderSocket } from '@/features/orders/useOrderSocket';
+import { useSocketConnection } from '@/lib/useSocketConnection';
+import { Toaster } from './Toaster';
 
 const NAV = [
   { to: '/', label: 'Market', end: true },
@@ -10,6 +13,11 @@ const NAV = [
 export function AppLayout({ children }: { children: ReactNode }) {
   const { data: user } = useCurrentUser();
   const logout = useLogout();
+
+  // Mounted once for the whole authenticated app, so order events keep arriving
+  // no matter which page is open.
+  useSocketConnection();
+  useOrderSocket();
 
   return (
     <div className="min-h-full">
@@ -49,6 +57,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <Toaster />
     </div>
   );
 }

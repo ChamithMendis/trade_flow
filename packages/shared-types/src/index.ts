@@ -98,8 +98,13 @@ export interface LoginRequest {
 // Market contracts
 // ---------------------------------------------------------------------------
 
-/** Socket.IO room every client joins to receive public market data. */
+/** Socket.IO room every authenticated client joins to receive market data. */
 export const MARKET_ROOM = 'market';
+
+/** Private room a client joins so it only ever sees its own order events. */
+export function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
 
 export interface InstrumentDto {
   id: string;
@@ -171,6 +176,27 @@ export interface OrderDetailDto extends OrderDto {
   executions: ExecutionDto[];
   events: OrderEventDto[];
 }
+
+/**
+ * Order events all carry the full order, so a client can drop it straight into
+ * its cache rather than patching fields.
+ */
+export type OrderEventName =
+  | typeof WsEvent.ORDER_CREATED
+  | typeof WsEvent.ORDER_UPDATED
+  | typeof WsEvent.ORDER_PARTIALLY_FILLED
+  | typeof WsEvent.ORDER_FILLED
+  | typeof WsEvent.ORDER_REJECTED
+  | typeof WsEvent.ORDER_CANCELLED;
+
+export const ORDER_EVENT_NAMES: readonly OrderEventName[] = [
+  WsEvent.ORDER_CREATED,
+  WsEvent.ORDER_UPDATED,
+  WsEvent.ORDER_PARTIALLY_FILLED,
+  WsEvent.ORDER_FILLED,
+  WsEvent.ORDER_REJECTED,
+  WsEvent.ORDER_CANCELLED,
+];
 
 export interface CreateOrderRequest {
   symbol: string;

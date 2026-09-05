@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { OrderSide, OrderStatus, OrderType } from '@tradeflow/shared-types';
+import { OrderNotifier } from '../events/order-notifier.service';
 import { ExchangeProducer } from '../exchange/exchange.producer';
 import { PrismaService } from '../prisma/prisma.service';
 import { OrdersService } from './orders.service';
@@ -92,11 +93,15 @@ function setup(options: Options = {}) {
   const enqueueOrder = jest.fn().mockResolvedValue(undefined);
   const exchange = { enqueueOrder } as unknown as ExchangeProducer;
 
+  const notify = jest.fn().mockResolvedValue(undefined);
+  const notifier = { notify } as unknown as OrderNotifier;
+
   return {
-    service: new OrdersService(prisma, exchange),
+    service: new OrdersService(prisma, exchange, notifier),
     createOrder,
     createEvent,
     enqueueOrder,
+    notify,
     tx,
   };
 }
@@ -132,10 +137,17 @@ describe('OrdersService.create', () => {
     expect(enqueueOrder).toHaveBeenCalledWith(result.id);
   });
 
-  it('does not queue anything when validation fails', async () => {
-    const { service, enqueueOrder } = setup({ cash: 10 });
+  it('does not queue or notify anything when validation fails', async () => {
+    const { service, enqueueOrder, notify } = setup({ cash: 10 });
     await expect(service.create('u1', buy())).rejects.toThrow();
     expect(enqueueOrder).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('pushes an order.created event to the owner', async () => {
+    const { service, notify } = setup();
+    const result = await service.create('u1', buy());
+    expect(notify).toHaveBeenCalledWith(result.id, 'order.created');
   });
 
   it('rejects a buy the trader cannot afford', async () => {
@@ -237,6 +249,14 @@ describe('OrdersService.cancel', () => {
 
     expect(result.status).toBe(OrderStatus.CANCELLED);
     expect(createArg(createEvent).eventType).toBe('CANCELLED');
+  });
+
+  it('pushes an order.cancelled event to the owner', async () => {
+    const { service, notify } = setup({
+      order: { id: 'o1', status: OrderStatus.NEW, filledQuantity: 0 },
+    });
+    await service.cancel('u1', 'o1');
+    expect(notify).toHaveBeenCalledWith('o1', 'order.cancelled');
   });
 
   it('refuses to cancel a filled order', async () => {

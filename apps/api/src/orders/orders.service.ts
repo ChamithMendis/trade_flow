@@ -10,11 +10,13 @@ import {
   OrderSide,
   OrderStatus,
   OrderType,
+  WsEvent,
   isOpenOrderStatus,
   type OrderDetailDto,
   type OrderDto,
 } from '@tradeflow/shared-types';
 import { ExchangeProducer } from '../exchange/exchange.producer';
+import { OrderNotifier } from '../events/order-notifier.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { ListOrdersDto } from './dto/list-orders.dto';
@@ -41,6 +43,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly exchange: ExchangeProducer,
+    private readonly notifier: OrderNotifier,
   ) {}
 
   async create(userId: string, dto: CreateOrderDto): Promise<OrderDto> {
@@ -155,8 +158,9 @@ export class OrdersService {
       return toOrderDto(order);
     });
 
-    // Queued only after the transaction commits, so the worker can never pick
-    // up an order that isn't visible yet.
+    // Both only after the transaction commits, so the worker can never pick up
+    // an order that isn't visible yet and the client never sees a phantom.
+    await this.notifier.notify(order.id, WsEvent.ORDER_CREATED);
     await this.exchange.enqueueOrder(order.id);
 
     return order;
@@ -194,7 +198,7 @@ export class OrdersService {
   }
 
   async cancel(userId: string, orderId: string): Promise<OrderDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx) => {
       // Locked so a fill landing at the same moment cannot overwrite the
       // cancel (and vice versa) — the exchange worker takes the same lock.
       const [existing] = await tx.$queryRaw<LockedOrderRow[]>`
@@ -231,6 +235,10 @@ export class OrdersService {
 
       return toOrderDto(order);
     });
+
+    await this.notifier.notify(orderId, WsEvent.ORDER_CANCELLED);
+
+    return order;
   }
 
   private assertPriceMatchesType(dto: CreateOrderDto): void {

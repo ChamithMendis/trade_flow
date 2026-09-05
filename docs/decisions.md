@@ -24,6 +24,27 @@ Short records of non-obvious choices. Newest first.
   onto one config, each app keeps its scaffolded linter and the root owns a single **Prettier**
   config for formatting. Revisit if the split causes friction.
 
+## ADR-0014 — Socket auth in middleware; per-user rooms
+
+**Date:** 2026-09-05
+**Status:** Accepted (supersedes the "socket stays unauthenticated" half of ADR-0010)
+
+- **Every** socket connection now needs a valid JWT. Phase 3 left the socket open because prices
+  are public, but the whole app sits behind login and order events are per-trader, so an
+  anonymous tier buys nothing and is one more path to get wrong.
+- Auth runs as Socket.IO **middleware** (`server.use` in `afterInit`), not in
+  `handleConnection`. The end-to-end test caught the difference: rejecting inside
+  `handleConnection` still completes the handshake, so the client fires `connect` and only then
+  `disconnect`. Middleware fails the handshake and the client gets `connect_error`.
+- Clients join `market` (shared) and `user:<id>` (private). Order events are emitted only to the
+  private room — the server never filters on the client side, so spec §14 holds by construction.
+- Order events carry the **full `OrderDto`**, not a delta, so a client can drop the payload into
+  its cache without reconstructing state.
+- `OrderNotifier` lives in `events/`, not `orders/`: OrdersModule already imports ExchangeModule,
+  and both need to emit, so an `orders/`-based notifier would make the modules circular.
+- The browser socket's `auth` option is a **callback**. With a static object, a reconnect after a
+  token change would replay the old token.
+
 ## ADR-0013 — Exchange: one job per slice, locked transitions
 
 **Date:** 2026-09-05
